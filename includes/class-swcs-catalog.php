@@ -4,6 +4,7 @@ if ( ! defined( 'ABSPATH' ) ) exit;
 class SWCS_Catalog {
     const OPTION_ACCESS_KEY = 'swcs_access_key';
     const OPTION_LANGUAGE   = 'swcs_language';
+    const OPTION_LAST_SYNC  = 'swcs_last_sync';
 
     public static function save_settings( $access_key, $language ) {
         if ( $access_key !== '' ) {
@@ -37,6 +38,75 @@ class SWCS_Catalog {
                 'extension' => 'xml',
             ),
             'https://ws.spotgifts.com.br/downloads/v1SSL/file'
+        );
+    }
+
+    public static function get_storage_dir() {
+        $uploads = wp_upload_dir();
+        $dir = trailingslashit( $uploads['basedir'] ) . 'swcs-catalog';
+        if ( ! file_exists( $dir ) ) {
+            wp_mkdir_p( $dir );
+        }
+        if ( is_dir( $dir ) ) {
+            $index = trailingslashit( $dir ) . 'index.php';
+            if ( ! file_exists( $index ) ) {
+                file_put_contents( $index, "<?php\n// Silence is golden.\n" );
+            }
+            $htaccess = trailingslashit( $dir ) . '.htaccess';
+            if ( ! file_exists( $htaccess ) ) {
+                file_put_contents( $htaccess, "Deny from all\n" );
+            }
+        }
+        return $dir;
+    }
+
+    public static function download_catalog( $data ) {
+        $url = self::build_download_url( $data );
+        if ( is_wp_error( $url ) ) return $url;
+
+        $response = wp_remote_get( $url, array(
+            'timeout'     => 120,
+            'redirection' => 3,
+            'sslverify'   => true,
+            'headers'     => array( 'Accept' => 'application/xml, text/xml, */*' ),
+        ) );
+
+        if ( is_wp_error( $response ) ) {
+            return new WP_Error( 'download_failed', 'Falha ao baixar ' . $data . ': ' . $response->get_error_message() );
+        }
+
+        $code = wp_remote_retrieve_response_code( $response );
+        $body = wp_remote_retrieve_body( $response );
+        if ( $code < 200 || $code >= 300 ) {
+            return new WP_Error( 'http_error', 'A Stricker respondeu com HTTP ' . $code . ' ao baixar ' . $data . '.' );
+        }
+        if ( trim( $body ) === '' ) {
+            return new WP_Error( 'empty_response', 'A Stricker retornou uma resposta vazia para ' . $data . '.' );
+        }
+
+        libxml_use_internal_errors( true );
+        $xml = simplexml_load_string( $body );
+        if ( $xml === false ) {
+            return new WP_Error( 'invalid_xml', 'O arquivo ' . $data . ' foi recebido, mas não contém XML válido.' );
+        }
+
+        $dir = self::get_storage_dir();
+        if ( ! is_dir( $dir ) || ! is_writable( $dir ) ) {
+            return new WP_Error( 'storage_error', 'Não foi possível criar ou gravar no diretório local do catálogo.' );
+        }
+
+        $path = trailingslashit( $dir ) . sanitize_file_name( $data ) . '.xml';
+        if ( file_put_contents( $path, $body, LOCK_EX ) === false ) {
+            return new WP_Error( 'write_error', 'Não foi possível salvar o arquivo ' . $data . '.xml.' );
+        }
+
+        update_option( self::OPTION_LAST_SYNC, current_time( 'mysql' ), false );
+
+        return array(
+            'type' => $data,
+            'path' => $path,
+            'bytes' => strlen( $body ),
+            'http_code' => $code,
         );
     }
 }
