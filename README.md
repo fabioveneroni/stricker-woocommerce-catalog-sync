@@ -1,0 +1,1 @@
+# stricker-woocommerce-catalog-sync
