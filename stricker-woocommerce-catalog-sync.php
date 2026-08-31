@@ -2,14 +2,14 @@
 /**
  * Plugin Name: Stricker WooCommerce Catalog Sync
  * Description: Baixa e processa o catálogo XML da Stricker para posterior sincronização com WooCommerce.
- * Version: 0.2.1
+ * Version: 0.3.0
  * Author: Fabio Veneroni
  * Text Domain: stricker-woocommerce-catalog-sync
  */
 
 if ( ! defined( 'ABSPATH' ) ) exit;
 
-define( 'SWCS_VERSION', '0.2.1' );
+define( 'SWCS_VERSION', '0.3.0' );
 define( 'SWCS_FILE', __FILE__ );
 define( 'SWCS_DIR', plugin_dir_path( __FILE__ ) );
 define( 'SWCS_URL', plugin_dir_url( __FILE__ ) );
